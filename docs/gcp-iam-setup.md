@@ -84,7 +84,30 @@ Phai thay dung 1 role `antiCryptoMinerdSelfManage` voi dieu kien dung ten VM tuo
 Neu thay them role khac (Editor, Owner, compute admin...) tu truoc — go bo di, vi no vo hieu
 hoa toan bo gioi han o buoc 3.
 
-## 6. config.json tren tung VM
+## 6. Nhieu instance (50+): dung script tu dong
+
+Lam tay tung lenh cho 50 VM la khong thuc te. Dung `docs/bulk-iam-setup.sh`:
+
+```bash
+cd docs
+cp instances.csv.example instances.csv
+notepad instances.csv   # hoac nano/vim — dien dung instance_name,zone cho tung VM, 1 dong/VM
+
+chmod +x bulk-iam-setup.sh
+./bulk-iam-setup.sh my-project-id
+```
+
+Script tu dong: tao role (neu chua co) -> tao service account (neu chua co) -> voi moi dong
+trong `instances.csv`: gan IAM Condition rieng cho instance do, roi STOP -> gan service account
+-> START lai VM (bat buoc phai dung VM de doi service account, khong co cach nao lam luc dang
+chay). Chay lai script nhieu lan la an toan (idempotent) — VM da cau hinh dung se khong bi
+dung lai lan nua vi script kiem tra status truoc.
+
+**Luu y khi chay tren 50 VM:** moi VM se bi dung vai chuc giay-vai phut trong luc doi service
+account. Neu day la production dang phuc vu traffic, nen chay theo batch nho (vd 5-10 VM/lan,
+sua vong lap trong script hoac chia nho `instances.csv`) thay vi dung ca 50 cung luc.
+
+## 7. config.json tren tung VM
 
 ```json
 "gcp_delete_self": true,

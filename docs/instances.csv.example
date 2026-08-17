@@ -1,0 +1,5 @@
+# instance_name,zone
+# Xoa dong comment nay va dien danh sach that. Vi du:
+vm-web-01,asia-southeast1-a
+vm-web-02,asia-southeast1-a
+vm-worker-01,asia-southeast1-b
