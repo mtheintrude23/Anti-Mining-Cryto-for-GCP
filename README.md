@@ -1,101 +1,679 @@
-# anti-crypto-minerd for Windows Server
+# 🛡️ Anti-Crypto-MinerD for Windows
 
-Native `.NET 8` Windows Service port for Windows Server 2019, 2022, and 2025. Code comments are English; this guide is Vietnamese. The service performs independent periodic scans, aggregates confidence per detection, logs locally and to Windows Event Log, then optionally sends Discord notifications and remediates process-backed findings.
+> Native `.NET 8` Windows Service for detecting suspicious
+> cryptocurrency-mining activity on Windows Server.
 
-## Kien truc
+**Supported:** Windows Server 2019 · 2022 · 2025  
+**Runtime:** .NET 8 · Native Windows Service · `win-x64` / `win-arm64`
 
-`SecurityWorker` la orchestration loop. Moi detector nhan chung `ScanContext` (cau hinh, logger, GCP client, hostname) va tra ve `DetectionAlert`; cac detector chay song song qua `Task.WhenAll`. `ConfigProvider` theo doi `config.json` bang `FileSystemWatcher`; reload loi giu lai cau hinh hop le truoc do.
+---
 
-| Linux module | Windows implementation |
-| --- | --- |
-| `daemon_core` | `Services/SecurityWorker`, `Core/ScanContext` |
-| `process_inspector` | `Detectors/ProcessInspector` qua WMI `Win32_Process` |
-| `network_inspector` | `Detectors/NetworkInspector` qua `Get-NetTCPConnection` |
-| `fim_monitor` | `Detectors/PersistenceMonitor` (Startup watcher, Registry/Task/Service diff) |
-| `rootkit_detector` | `Detectors/DriverInspector` (`Win32_SystemDriver`) |
-| `container_inspector` | `Detectors/ContainerInspector` (`docker ps`, optional) |
-| `ebpf_monitor` | `Detectors/SysmonTelemetryMonitor` (optional Sysmon Event ID 1) |
-| `discord_notifier` | `Services/DiscordNotifier` (`HttpClient`) |
-| `gcp_control` | `Infrastructure/GcpMetadataClient` |
-| `remediation_engine` | `Services/RemediationEngine` |
+## ✨ FEATURES
 
-## Build
+- 🔎 Process & executable inspection
+- 🌐 Network connection monitoring
+- ⛏️ Mining pool detection
+- 🚫 IP / CIDR blacklist
+- 🧩 Persistence monitoring
+- ⚙️ Registry / Task / Service monitoring
+- 🖥️ Driver inspection
+- 🐳 Docker container inspection
+- 📡 Optional Sysmon telemetry
+- 🎯 Confidence-based detection
+- 📝 Local + Windows Event Log
+- 🔔 Discord notifications
+- 🧹 Process remediation & quarantine
+- ☁️ Optional Google Cloud VM control
 
-Tren may Windows co .NET SDK 8:
+> ⚠️ Heuristic detection only. This is NOT a kernel-level anti-rootkit or EDR solution.
+
+---
+
+# 🏗️ ARCHITECTURE
+
+```text
+                         ┌──────────────────────┐
+                         │   SecurityWorker     │
+                         │  Orchestration Loop  │
+                         └──────────┬───────────┘
+                                    │
+                         ┌──────────▼───────────┐
+                         │     ScanContext      │
+                         │ Config / Logger / GCP│
+                         └──────────┬───────────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              │                     │                     │
+              ▼                     ▼                     ▼
+       ┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+       │   Process   │       │   Network   │       │ Persistence │
+       │  Inspector  │       │  Inspector  │       │   Monitor   │
+       └──────┬──────┘       └──────┬──────┘       └──────┬──────┘
+              │                     │                     │
+              └─────────────────────┼─────────────────────┘
+                                    ▼
+                         ┌──────────────────────┐
+                         │    DetectionAlert    │
+                         │   Confidence Score   │
+                         └──────────┬───────────┘
+                                    │
+                   ┌────────────────┼────────────────┐
+                   ▼                ▼                ▼
+              📝 Logging       🔔 Discord       🧹 Remediation
+                                                      │
+                                                      ▼
+                                                 ☁️ GCP Control
+```
+
+Các detector chạy song song bằng `Task.WhenAll`.
+
+---
+
+# 🔄 MODULE MAPPING
+
+| 🐧 Linux Module | 🪟 Windows Implementation |
+|---|---|
+| `daemon_core` | `SecurityWorker` + `ScanContext` |
+| `process_inspector` | `ProcessInspector` |
+| `network_inspector` | `NetworkInspector` |
+| `fim_monitor` | `PersistenceMonitor` |
+| `rootkit_detector` | `DriverInspector` |
+| `container_inspector` | `ContainerInspector` |
+| `ebpf_monitor` | `SysmonTelemetryMonitor` |
+| `discord_notifier` | `DiscordNotifier` |
+| `gcp_control` | `GcpMetadataClient` |
+| `remediation_engine` | `RemediationEngine` |
+
+---
+
+# 🚀 BUILD
+
+## 📋 Requirements
+
+- Windows Server 2019+
+- .NET SDK 8
+- PowerShell
+- Administrator privileges
+
+## 📦 Publish
 
 ```powershell
 git clone <repository-url>
 cd anti-crypto-minerd-windows
+
 dotnet restore .\AntiCryptoMinerd.Windows.sln
-dotnet publish .\src\AntiCryptoMinerd\AntiCryptoMinerd.csproj -c Release -r win-x64 --self-contained true -o .\publish
+
+dotnet publish `
+  .\src\AntiCryptoMinerd\AntiCryptoMinerd.csproj `
+  -c Release `
+  -r win-x64 `
+  --self-contained true `
+  -o .\publish
 ```
 
-Luu y: target `win-x64` phu hop cho Windows Server x64. Doi sang `win-arm64` neu VM ARM64.
+## 🖥️ ARM64
 
-## Cai dat va van hanh
+```powershell
+dotnet publish `
+  .\src\AntiCryptoMinerd\AntiCryptoMinerd.csproj `
+  -c Release `
+  -r win-arm64 `
+  --self-contained true `
+  -o .\publish
+```
 
-Mo PowerShell **Run as Administrator**, sau khi publish:
+---
+
+# ⚙️ INSTALLATION
+
+> 🔐 Run PowerShell as Administrator.
 
 ```powershell
 .\scripts\install.ps1 -PublishDirectory .\publish
-notepad "$env:ProgramData\anti-crypto-minerd\config.json"
-Restart-Service AntiCryptoMinerd
-Get-Service AntiCryptoMinerd
-Get-Content "$env:ProgramData\anti-crypto-minerd\logs\anti-crypto-minerd.log" -Tail 100 -Wait
 ```
 
-Script dang ky native service voi Virtual Service Account `NT SERVICE\AntiCryptoMinerd`, cap Modify permission chi tren thu muc du lieu rieng, va cau hinh service recovery. Khong can NSSM. Config duoc reload khi file thay doi; restart chi can khi cap nhat binary hoac ACL.
+### 📝 Configure
 
-Mac dinh `dry_run=true`. Chi dat `dry_run=false` sau khi da kiem tra allowlist va Discord webhook. `gcp_shutdown_self` mac dinh tat. Khi bat, service goi Compute Engine `instances.stop` sau finding confidence 100, dung metadata cua chinh VM hoac override config da validate theo format GCP. Lenh nay dung instance, khong xoa VM hay persistent disk.
+```powershell
+notepad "$env:ProgramData\anti-crypto-minerd\config.json"
+```
 
-`gcp_delete_self` mac dinh tat va **manh hon**: khi bat, service goi `instances.delete` tren chinh VM sau finding confidence 100 — xoa han instance (va boot disk, tru khi disk duoc cau hinh rieng voi `autoDelete=false` ben ngoai service nay). Hanh dong nay khong the hoan tac. Chi bat sau khi da chay `dry_run` du lau de xac nhan khong co false positive tren workload nay, va service account chi nen co quyen toi thieu can thiet (`compute.instances.delete` tren chinh instance, khong hon).
+### 🔄 Restart
 
-### Xac nhan truoc khi tu dung/xoa may (gcp_shutdown_require_confirmation)
+```powershell
+Restart-Service AntiCryptoMinerd
+```
 
-Mac dinh `gcp_shutdown_require_confirmation=false`: khi dieu kien kich hoat (stop hoac delete), service hanh dong ngay, khong cho ai xac nhan. Neu muon them mot buoc xac nhan thu cong (mot Administrator tren may phai go lenh trong X giay truoc khi hanh dong duoc thuc hien), dat `gcp_shutdown_require_confirmation=true` va cau hinh `gcp_shutdown_confirm_timeout_seconds`; chi tiet co che nam trong `Services/ShutdownConfirmationGate.cs`.
+### 🔎 Check Service
 
-**Luu y ve rui ro:** ca `gcp_shutdown_self` va dac biet `gcp_delete_self` deu dua tren heuristic (entropy, cong pool, ten tien trinh, v.v.), khong phai bang chung chac chan 100%. False positive khi tat xac nhan nghia la mat VM (va du lieu chua backup) ma khong ai kip can thiep. Neu VM nay co du lieu quan trong khong the mat, nen: (1) bat autoDelete=false cho boot disk qua GCP truoc, hoac (2) giu snapshot dinh ky ngoai service nay, hoac (3) bat lai `gcp_shutdown_require_confirmation`.
+```powershell
+Get-Service AntiCryptoMinerd
+```
 
-### Quyen IAM de goi duoc API xoa/dung (bat buoc, ngoai pham vi code)
+### 📜 Live Logs
 
-`gcp_delete_self`/`gcp_shutdown_self` chi la cau hinh — de VM thuc su goi duoc `instances.delete`/`instances.stop`, service account gan vao VM phai co quyen IAM tuong ung. Day la lop kiem soat truy cap thuc su cua co che nay (khong phai username/password, vi day la Windows Service chay nen, khong co nguoi dang nhap). Xem huong dan tao custom role + IAM Condition gioi han moi VM chi xoa duoc chinh no tai `docs/gcp-iam-setup.md`.
+```powershell
+Get-Content `
+  "$env:ProgramData\anti-crypto-minerd\logs\anti-crypto-minerd.log" `
+  -Tail 100 -Wait
+```
 
-Go cai dat, giu log/quarantine/config:
+---
+
+# 🔐 SERVICE SECURITY
+
+Service sử dụng Virtual Service Account:
+
+```text
+NT SERVICE\AntiCryptoMinerd
+```
+
+Quyền `Modify` chỉ được cấp trên data directory riêng.
+
+- ❌ Không cần NSSM
+- ❌ Không chạy bằng Administrator account
+- ❌ Không dùng shared credentials
+
+Service được cấu hình Windows Service Recovery để tự khởi động lại khi gặp lỗi.
+
+---
+
+# 🧪 DRY RUN
+
+Mặc định:
+
+```json
+{
+  "dry_run": true
+}
+```
+
+Recommended workflow:
+
+```text
+dry_run=true
+     │
+     ▼
+  🔎 Monitor
+     │
+     ▼
+📋 Review Alerts
+     │
+     ▼
+⚙️ Tune Allowlist
+     │
+     ▼
+🧪 Test Remediation
+     │
+     ▼
+dry_run=false
+```
+
+⚠️ Không bật remediation ngay trên production workload chưa được kiểm thử.
+
+---
+
+# ☁️ GOOGLE CLOUD CONTROL
+
+## 🛑 Shutdown VM
+
+```json
+{
+  "gcp_shutdown_self": true
+}
+```
+
+Service gọi:
+
+```text
+Google Compute Engine
+        │
+        └── instances.stop
+```
+
+VM được STOP, không bị xóa.
+
+## 💀 Delete VM
+
+```json
+{
+  "gcp_delete_self": true
+}
+```
+
+Service gọi:
+
+```text
+Google Compute Engine
+        │
+        └── instances.delete
+```
+
+> 🚨 DESTRUCTIVE ACTION
+
+Instance sẽ bị xóa. Boot disk có thể bị xóa tùy cấu hình `autoDelete`.
+
+⚠️ Hành động này không thể hoàn tác.
+
+---
+
+# 🛡️ SHUTDOWN CONFIRMATION
+
+Có thể yêu cầu Administrator xác nhận trước khi shutdown/delete:
+
+```json
+{
+  "gcp_shutdown_require_confirmation": true,
+  "gcp_shutdown_confirm_timeout_seconds": 60
+}
+```
+
+Flow:
+
+```text
+🚨 Finding
+    │
+    ▼
+🎯 Confidence = 100%
+    │
+    ▼
+⚠️ Confirmation Required
+    │
+    ├── ✅ Confirm
+    │      │
+    │      ▼
+    │   ☁️ Shutdown/Delete
+    │
+    └── ❌ Timeout
+           │
+           ▼
+        🛑 No Action
+```
+
+---
+
+# 🔑 GCP IAM
+
+Service Account phải có quyền IAM tương ứng.
+
+Khuyến nghị sử dụng Least Privilege:
+
+```text
+Service Account
+      │
+      ├── compute.instances.stop
+      │
+      └── compute.instances.delete
+              │
+              ▼
+       IAM Condition
+              │
+              ▼
+      Only authorized VM
+```
+
+Chi tiết:
+
+```text
+docs/gcp-iam-setup.md
+```
+
+---
+
+# 🔔 DISCORD NOTIFICATIONS
+
+❌ Không lưu Discord webhook dưới dạng plaintext.
+
+## 🔐 Protect Webhook
+
+```powershell
+.\publish\AntiCryptoMinerd.exe `
+  --protect-webhook `
+  "https://discord.com/api/webhooks/..."
+```
+
+Output:
+
+```text
+dpapi:<base64>
+```
+
+Đưa giá trị vào:
+
+```json
+{
+  "webhook_url": "dpapi:<base64>"
+}
+```
+
+Webhook sử dụng:
+
+```text
+Windows DPAPI
+DataProtectionScope.LocalMachine
+```
+
+---
+
+# 🔒 CONFIGURATION ACL
+
+Config:
+
+```text
+C:\ProgramData\anti-crypto-minerd\config.json
+```
+
+ACL:
+
+```text
+SYSTEM
+Administrators
+NT SERVICE\AntiCryptoMinerd
+```
+
+User thông thường không được phép đọc configuration chứa secret.
+
+---
+
+# 🧹 REMEDIATION
+
+Remediation chỉ áp dụng cho alert có:
+
+```text
+PID
++
+Executable Path
+```
+
+Safety checks:
+
+```text
+             🚨 Suspicious Process
+                      │
+                      ▼
+             🔎 Executable Check
+                      │
+          ┌───────────┼───────────┐
+          │           │           │
+          ▼           ▼           ▼
+     System32      SysWOW64   Microsoft Signed
+          │           │           │
+          └───────────┴───────────┘
+                      │
+                      ▼
+                    ❌ Reject
+
+              Unknown / Suspicious
+                      │
+                      ▼
+                   🛑 Kill
+                      │
+                      ▼
+                📦 Quarantine
+```
+
+Quarantine:
+
+- 🕒 Timestamp
+- 🆔 PID
+- 🔒 Restricted ACL
+- 📝 Audit Log
+- 🔔 Discord Alert
+
+---
+
+# 📡 SYSMON TELEMETRY
+
+Sysmon Event ID `1` cung cấp process creation telemetry.
+
+Enable:
+
+```json
+{
+  "enableSysmonTelemetry": true
+}
+```
+
+> ℹ️ Sysmon telemetry không thay thế full ETW monitoring.
+
+---
+
+# 🐳 DOCKER DETECTION
+
+Nếu Docker được cài đặt:
+
+```text
+docker ps
+```
+
+được sử dụng để kiểm tra container đang chạy.
+
+Docker không tồn tại hoặc command thất bại sẽ không làm main loop crash.
+
+---
+
+# 🧩 PERSISTENCE MONITORING
+
+Theo dõi:
+
+```text
+┌──────────────────────────┐
+│ 🚀 Startup               │
+├──────────────────────────┤
+│ 📝 Registry              │
+├──────────────────────────┤
+│ ⏰ Scheduled Tasks       │
+├──────────────────────────┤
+│ ⚙️ Windows Services      │
+└──────────────────────────┘
+```
+
+Các thay đổi đáng ngờ được đưa vào detection pipeline.
+
+---
+
+# 🌐 NETWORK DETECTION
+
+Sử dụng:
+
+```text
+Get-NetTCPConnection
+```
+
+## 🚫 Blacklisted IP
+
+```text
+192.0.2.10
+2001:db8::10
+```
+
+## 🌐 CIDR
+
+```text
+192.0.2.0/24
+2001:db8::/32
+```
+
+## ⛏️ Mining Pool Ports
+
+```text
+poolPorts
+```
+
+Remote port nằm trong danh sách có thể được xem là mining indicator.
+
+---
+
+# 📝 LOGGING
+
+```text
+C:\ProgramData\anti-crypto-minerd\
+│
+├── 📄 config.json
+│
+├── 📁 logs\
+│   └── 📄 anti-crypto-minerd.log
+│
+└── 📁 quarantine\
+```
+
+Logs được ghi tới:
+
+- 📝 Local file
+- 🪟 Windows Event Log
+- 🔔 Discord
+- 🧾 Remediation audit
+
+---
+
+# 🗑️ UNINSTALL
+
+## 📦 Giữ config / logs / quarantine
 
 ```powershell
 .\scripts\uninstall.ps1 -KeepData
 ```
 
-Go va xoa du lieu (PowerShell se yeu cau xac nhan neu `-Confirm`):
+## 🗑️ Xóa toàn bộ data
 
 ```powershell
 .\scripts\uninstall.ps1 -Confirm
 ```
 
-## Cau hinh
+---
 
-Sao chep `config.json.example` thanh `C:\ProgramData\anti-crypto-minerd\config.json` khi khong dung installer. `allowlist` match process name, mot phan executable path, hoac publisher subject. `blacklistIps` nhan IP don le va CIDR IPv4/IPv6. `poolPorts` la remote ports duoc coi la pool mining.
+# ⚠️ OPERATIONAL BOUNDARIES
 
-### Bao ve webhook_url (khong luu plaintext)
+Anti-Crypto-MinerD là **user-mode security service**.
 
-Khong ghi Discord webhook URL dang plaintext vao `config.json`. Tren chinh may se chay service (PowerShell **Run as Administrator**):
+Không đảm bảo phát hiện được:
 
-```powershell
-.\publish\AntiCryptoMinerd.exe --protect-webhook "https://discord.com/api/webhooks/..."
+- ❌ Kernel rootkits
+- ❌ Hidden drivers
+- ❌ ETW tampering
+- ❌ Process hiding
+- ❌ Kernel-level network hiding
+- ❌ Advanced fileless malware
+
+Attacker có quyền kernel có thể che giấu:
+
+```text
+Process
+Connection
+File
+Event
+Driver
+Telemetry
 ```
 
-Lenh nay in ra mot chuoi dang `dpapi:<base64>`. Dan chuoi do vao truong `webhook_url` trong `config.json`. Gia tri duoc ma hoa bang Windows DPAPI, gan voi chinh may (`DataProtectionScope.LocalMachine`) — copy file `config.json` sang may khac hoac doc no boi user khong phai Administrator/SYSTEM tren may nay se khong giai ma duoc. `install.ps1` sinh ra tu `config.json.example` van la placeholder rong; hay chay lenh tren va dan gia tri ma hoa vao ngay sau khi cai dat, truoc khi bat `dry_run=false`.
+---
 
-`install.ps1` cung tu dong siet ACL rieng cho `config.json`: tat ke thua quyen tu `%ProgramData%`, chi cap quyen cho `SYSTEM`, `Administrators`, va virtual account `NT SERVICE\AntiCryptoMinerd`. User dang nhap thong thuong (kho co quyen Administrator) se khong doc duoc file nay, ke ca khi da co quyen tren thu muc `anti-crypto-minerd` noi chua log/quarantine.
+# 🛡️ DEFENSE IN DEPTH
 
-## Remediation an toan
+Không nên sử dụng Anti-Crypto-MinerD như lớp bảo vệ duy nhất.
 
-Remediation chi ap dung cho alert gan voi PID va executable path. Truoc khi `Kill` va quarantine, engine tu choi binary duoi `C:\Windows\System32` / `C:\Windows\SysWOW64` va tu choi binary Microsoft-signed co chain hop le. File bi quarantine duoc doi ten theo timestamp/PID va ACL bi rut quyen nhom thong dung. Tat ca action duoc ghi file log, Event Log va Discord alert.
+```text
+                    🪟 Windows Server
+                           │
+            ┌──────────────┼──────────────┐
+            ▼              ▼              ▼
+       🛡️ Defender       🔎 EDR        📊 Sysmon
+            │              │              │
+            └──────────────┼──────────────┘
+                           ▼
+                    🔐 WDAC / Policy
+                           │
+                           ▼
+                 🛡️ Anti-Crypto-MinerD
+                           │
+                           ▼
+                  📋 Incident Response
+```
 
-## Operational boundaries
+Entropy, mining signatures và network indicators đều là **heuristics**.
 
-- Day la user-mode service. No khong co kernel-level visibility hoac anti-rootkit assurance thuc su. Driver/ETW-level adversary co the an process, connection, file, hoac event.
-- Sysmon Event ID 1 la telemetry tuy chon, khong phai ETW session thay the day du eBPF. Cai Sysmon va bat `enableSysmonTelemetry` de co process creation telemetry gan realtime.
-- `Get-NetTCPConnection`, WMI, Event Log, Registry, va Docker co the bi gioi han boi quyen, policy, hoac component chua cai. Moi loi duoc catch va ghi log, khong lam dung main loop.
-- Authenticode chain validation giam false positive nhung khong thay the WDAC, Defender, EDR, audit, hoac quy trinh incident response. Entropy va mining signature la heuristic.
-- GCP self-shutdown lam dung VM va co the lam gian doan workload. Chi bat sau khi test `dry_run`, su dung service account co quyen toi thieu cho `compute.instances.stop`, va xac nhan project/zone/instance.
+Không có heuristic nào đảm bảo 100% chính xác.
+
+---
+
+# 🚨 SELF-SHUTDOWN / SELF-DELETE WARNING
+
+`gcp_shutdown_self` và đặc biệt `gcp_delete_self` có thể gây mất VM nếu detection là false positive.
+
+Trước khi bật production:
+
+- [ ] 🧪 Chạy `dry_run=true`
+- [ ] 🔎 Kiểm tra alerts
+- [ ] 📋 Xây dựng allowlist
+- [ ] 🧠 Kiểm tra workload hợp lệ
+- [ ] 🧪 Test trên VM riêng
+- [ ] 💾 Thiết lập backup / snapshot
+- [ ] 🔑 Kiểm tra IAM Conditions
+- [ ] 🔐 Dùng least-privilege Service Account
+- [ ] 🛡️ Cân nhắc bật confirmation gate
+
+> 🔴 KHÔNG bật `gcp_delete_self=true` trên workload quan trọng nếu chưa kiểm thử đầy đủ.
+
+---
+
+# 📌 RECOMMENDED PRODUCTION SETUP
+
+```text
+                 dry_run=true
+                       │
+                       ▼
+                  🔎 Monitor
+                       │
+          ┌────────────┼────────────┐
+          ▼            ▼            ▼
+     Tune Allowlist  Verify      Discord
+                    Detection     Alerts
+          │            │            │
+          └────────────┼────────────┘
+                       ▼
+                    Stable?
+                       │
+                      YES
+                       │
+                       ▼
+                dry_run=false
+                       │
+                       ▼
+                🧹 Remediation
+                       │
+                       ▼
+               🛑 Optional Shutdown
+                       │
+                       ▼
+                💀 Delete = Last Resort
+```
+
+---
+
+# 📄 LICENSE
+
+See the repository license file for licensing terms.
+
+---
+
+# 🛡️ SECURITY PHILOSOPHY
+
+> **Detect first. Verify second. Remediate third. Destroy only as a last resort.**
+
+```text
+🔎 Visibility
+      │
+      ▼
+📋 Evidence
+      │
+      ▼
+🎯 Confidence
+      │
+      ▼
+🧹 Controlled Remediation
+      │
+      ▼
+☁️ Optional GCP Action
+```
+
+> **Security first. Automation second. Destructive actions last.**
