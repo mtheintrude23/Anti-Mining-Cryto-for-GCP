@@ -13,10 +13,10 @@ public sealed class SecurityWorker : BackgroundService
     private readonly DiscordNotifier _notifier;
     private readonly ShutdownConfirmationGate _shutdownGate;
 
-    public SecurityWorker(ConfigProvider config, SecurityLogger logger, GcpMetadataClient gcp, ProcessInspector process, NetworkInspector network, PersistenceMonitor persistence, DriverInspector driver, ContainerInspector containers, SysmonTelemetryMonitor sysmon, RemediationEngine remediation, DiscordNotifier notifier, ShutdownConfirmationGate shutdownGate)
+    public SecurityWorker(ConfigProvider config, SecurityLogger logger, GcpMetadataClient gcp, ProcessInspector process, GpuInspector gpu, NetworkInspector network, PersistenceMonitor persistence, DriverInspector driver, ContainerInspector containers, SysmonTelemetryMonitor sysmon, RemediationEngine remediation, DiscordNotifier notifier, ShutdownConfirmationGate shutdownGate)
     {
         _context = new ScanContext(config, logger, gcp);
-        _detectors = [process, network, persistence, driver, containers, sysmon];
+        _detectors = [process, gpu, network, persistence, driver, containers, sysmon];
         _remediation = remediation;
         _notifier = notifier;
         _shutdownGate = shutdownGate;

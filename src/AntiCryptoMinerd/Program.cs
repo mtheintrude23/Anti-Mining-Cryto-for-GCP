@@ -23,6 +23,7 @@ builder.Services.AddSingleton<DiscordNotifier>();
 builder.Services.AddSingleton<RemediationEngine>();
 builder.Services.AddSingleton<ShutdownConfirmationGate>();
 builder.Services.AddSingleton<ProcessInspector>();
+builder.Services.AddSingleton<GpuInspector>();
 builder.Services.AddSingleton<NetworkInspector>();
 builder.Services.AddSingleton<PersistenceMonitor>();
 builder.Services.AddSingleton<DriverInspector>();
