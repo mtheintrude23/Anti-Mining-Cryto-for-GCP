@@ -34,6 +34,15 @@ $exe = Join-Path $binaryRoot "AntiCryptoMinerd.exe"
 & sc.exe failure $serviceName reset= 86400 actions= restart/5000/restart/15000/restart/30000 | Out-Null
 & icacls.exe $root /grant "NT SERVICE\$serviceName:(OI)(CI)M" /T /C | Out-Null
 
+# config.json holds the (DPAPI-encrypted) Discord webhook and other sensitive settings.
+# Lock it down beyond the inherited ProgramData ACL: disable inheritance and grant access
+# only to SYSTEM, Administrators, and the service's own virtual account. Ordinary
+# interactively-logged-on users get no access at all, even though they can read $root itself.
+& icacls.exe $configPath /inheritance:r | Out-Null
+& icacls.exe $configPath /grant "SYSTEM:F" | Out-Null
+& icacls.exe $configPath /grant "BUILTIN\Administrators:F" | Out-Null
+& icacls.exe $configPath /grant "NT SERVICE\$serviceName:M" | Out-Null
+
 try {
     if (-not [System.Diagnostics.EventLog]::SourceExists($serviceName)) { New-EventLog -LogName Application -Source $serviceName }
 } catch { Write-Warning "Could not pre-create Event Log source: $($_.Exception.Message)" }

@@ -20,6 +20,7 @@ public sealed class ProcessInspector : IThreatDetector
                 cancellationToken.ThrowIfCancellationRequested();
                 var pid = Convert.ToInt32(process["ProcessId"] ?? 0);
                 var name = process["Name"]?.ToString() ?? "unknown";
+                var owner = GetOwner(process);
                 var path = process["ExecutablePath"]?.ToString();
                 var commandLine = process["CommandLine"]?.ToString() ?? string.Empty;
                 if (IsAllowlisted(context, name, path, null)) continue;
@@ -40,7 +41,7 @@ public sealed class ProcessInspector : IThreatDetector
                     var entropy = ShannonEntropy(path, context.Config.EntropySampleBytes);
                     if (entropy > context.Config.EntropyThreshold) { score += 20; reasons.Add($"High executable entropy: {entropy:F2}"); }
                 }
-                if (score > 0) alerts.Add(new DetectionAlert("process", Math.Min(score, 100), reasons, pid, name, path, commandLine));
+                if (score > 0) alerts.Add(new DetectionAlert("process", Math.Min(score, 100), reasons, pid, name, owner, path, commandLine));
             }
         }
         catch (Exception ex) { context.Logger.WriteAsync("ERROR", $"WMI process scan failed: {ex.Message}", cancellationToken).GetAwaiter().GetResult(); }
@@ -51,6 +52,19 @@ public sealed class ProcessInspector : IThreatDetector
         string.Equals(item, name, StringComparison.OrdinalIgnoreCase) ||
         (!string.IsNullOrWhiteSpace(path) && path.Contains(item, StringComparison.OrdinalIgnoreCase)) ||
         (!string.IsNullOrWhiteSpace(publisher) && publisher.Contains(item, StringComparison.OrdinalIgnoreCase)));
+
+    private static string? GetOwner(ManagementObject process)
+    {
+        try
+        {
+            var result = process.InvokeMethod("GetOwner", null, null);
+            if (result is not ManagementBaseObject owner || Convert.ToUInt32(owner["ReturnValue"] ?? 1) != 0) return null;
+            var domain = owner["Domain"]?.ToString();
+            var user = owner["User"]?.ToString();
+            return string.IsNullOrWhiteSpace(user) ? null : string.IsNullOrWhiteSpace(domain) ? user : $"{domain}\\{user}";
+        }
+        catch { return null; }
+    }
 
     private static bool IsSuspiciousPath(string path, out string reason)
     {

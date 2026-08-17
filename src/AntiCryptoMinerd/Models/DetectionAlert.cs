@@ -6,6 +6,7 @@ public sealed record DetectionAlert(
     IReadOnlyList<string> Reasons,
     int? ProcessId = null,
     string? ProcessName = null,
+    string? ProcessOwner = null,
     string? ExecutablePath = null,
     string? CommandLine = null,
     string? NetworkContext = null,

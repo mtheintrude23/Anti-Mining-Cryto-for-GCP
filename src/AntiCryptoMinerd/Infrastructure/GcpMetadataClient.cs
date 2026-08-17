@@ -23,9 +23,20 @@ public sealed class GcpMetadataClient
         catch { return null; } // Non-GCE hosts intentionally have no metadata.
     }
 
+    public async Task<bool> StopSelfAsync(AgentConfig config, CancellationToken cancellationToken)
+    {
+        if (!config.GcpShutdownSelf) return false;
+        return await CallInstanceActionAsync(config, "stop", HttpMethod.Post, cancellationToken);
+    }
+
     public async Task<bool> DeleteSelfAsync(AgentConfig config, CancellationToken cancellationToken)
     {
         if (!config.GcpDeleteSelf) return false;
+        return await CallInstanceActionAsync(config, string.Empty, HttpMethod.Delete, cancellationToken);
+    }
+
+    private async Task<bool> CallInstanceActionAsync(AgentConfig config, string actionSuffix, HttpMethod method, CancellationToken cancellationToken)
+    {
         try
         {
             var metadata = await GetInstanceAsync(cancellationToken);
@@ -39,7 +50,9 @@ public sealed class GcpMetadataClient
             if (string.IsNullOrWhiteSpace(token)) return false;
             using var api = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
             api.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            using var response = await api.DeleteAsync($"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{instance}", cancellationToken);
+            var url = $"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{instance}" + (string.IsNullOrEmpty(actionSuffix) ? "" : $"/{actionSuffix}");
+            using var request = new HttpRequestMessage(method, url);
+            using var response = await api.SendAsync(request, cancellationToken);
             return response.IsSuccessStatusCode;
         }
         catch { return false; }

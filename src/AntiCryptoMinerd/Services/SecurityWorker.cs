@@ -11,13 +11,15 @@ public sealed class SecurityWorker : BackgroundService
     private readonly IReadOnlyList<IThreatDetector> _detectors;
     private readonly RemediationEngine _remediation;
     private readonly DiscordNotifier _notifier;
+    private readonly ShutdownConfirmationGate _shutdownGate;
 
-    public SecurityWorker(ConfigProvider config, SecurityLogger logger, GcpMetadataClient gcp, ProcessInspector process, NetworkInspector network, PersistenceMonitor persistence, DriverInspector driver, ContainerInspector containers, SysmonTelemetryMonitor sysmon, RemediationEngine remediation, DiscordNotifier notifier)
+    public SecurityWorker(ConfigProvider config, SecurityLogger logger, GcpMetadataClient gcp, ProcessInspector process, NetworkInspector network, PersistenceMonitor persistence, DriverInspector driver, ContainerInspector containers, SysmonTelemetryMonitor sysmon, RemediationEngine remediation, DiscordNotifier notifier, ShutdownConfirmationGate shutdownGate)
     {
         _context = new ScanContext(config, logger, gcp);
         _detectors = [process, network, persistence, driver, containers, sysmon];
         _remediation = remediation;
         _notifier = notifier;
+        _shutdownGate = shutdownGate;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -58,10 +60,20 @@ public sealed class SecurityWorker : BackgroundService
         await _remediation.ApplyAsync(alert, _context, token);
         await _context.Logger.WriteAsync("WARN", $"{alert.DetectionType}: confidence={alert.Confidence}; action={alert.ActionTaken}; reasons={string.Join(", ", alert.Reasons)}", token);
         await _notifier.SendAsync(alert, _context, token);
-        if (alert.Confidence >= 100 && _context.Config.GcpDeleteSelf && !_context.Config.DryRun)
+        if (alert.Confidence >= 100 && !_context.Config.DryRun && (_context.Config.GcpShutdownSelf || _context.Config.GcpDeleteSelf))
         {
-            var deleted = await _context.Gcp.DeleteSelfAsync(_context.Config, token);
-            await _context.Logger.WriteAsync("WARN", deleted ? "GCP self-deletion request accepted." : "GCP self-deletion request was not accepted.", token);
+            var reason = $"{alert.DetectionType} (confidence={alert.Confidence}) on {_context.Hostname}";
+            var confirmed = await _shutdownGate.RequestAndAwaitAsync(_context.Config, reason, _context.Logger, token);
+            if (confirmed && _context.Config.GcpDeleteSelf)
+            {
+                var deleted = await _context.Gcp.DeleteSelfAsync(_context.Config, token);
+                await _context.Logger.WriteAsync("WARN", deleted ? "GCP self-delete request accepted; instance is being destroyed." : "GCP self-delete request was not accepted.", token);
+            }
+            else if (confirmed && _context.Config.GcpShutdownSelf)
+            {
+                var stopped = await _context.Gcp.StopSelfAsync(_context.Config, token);
+                await _context.Logger.WriteAsync("WARN", stopped ? "GCP self-shutdown request accepted." : "GCP self-shutdown request was not accepted.", token);
+            }
         }
     }
 }

@@ -33,7 +33,9 @@ public sealed class NetworkInspector : IThreatDetector
                 string? name = null; string? path = null;
                 try { using var p = Process.GetProcessById(pid); name = p.ProcessName; path = p.MainModule?.FileName; } catch { reasons.Add("Owning process details unavailable"); }
                 var local = $"{connection.GetProperty("LocalAddress").GetString()}:{connection.GetProperty("LocalPort").GetInt32()}";
-                alerts.Add(new DetectionAlert("network", Math.Min(score, 100), reasons, pid, name, path, NetworkContext: $"{local} -> {remoteAddress}:{remotePort}"));
+                alerts.Add(new DetectionAlert("network", Math.Min(score, 100), reasons,
+                    ProcessId: pid, ProcessName: name, ExecutablePath: path,
+                    NetworkContext: $"{local} -> {remoteAddress}:{remotePort}"));
             }
         }
         catch (Exception ex) { await context.Logger.WriteAsync("ERROR", $"Network scan failed: {ex.Message}", cancellationToken); }

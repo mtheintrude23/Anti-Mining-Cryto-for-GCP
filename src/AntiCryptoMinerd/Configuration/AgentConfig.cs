@@ -2,7 +2,9 @@ namespace AntiCryptoMinerd.Configuration;
 
 public sealed class AgentConfig
 {
-    public string WebhookUrl { get; init; } = string.Empty;
+    // Not "init": ConfigProvider decrypts a DPAPI-protected value (see webhook_url in
+    // config.json.example) into this property right after deserialization.
+    public string WebhookUrl { get; set; } = string.Empty;
     public int ScanIntervalSeconds { get; init; } = 30;
     public int ConfidenceThreshold { get; init; } = 70;
     public double EntropyThreshold { get; init; } = 7.4;
@@ -13,7 +15,10 @@ public sealed class AgentConfig
     public bool EnableDriverCheck { get; init; } = true;
     public bool EnableContainerCheck { get; init; } = true;
     public bool EnableSysmonTelemetry { get; init; }
+    public bool GcpShutdownSelf { get; init; }
     public bool GcpDeleteSelf { get; init; }
+    public bool GcpShutdownRequireConfirmation { get; init; }
+    public int GcpShutdownConfirmTimeoutSeconds { get; init; } = 300;
     public string GcpProjectId { get; init; } = string.Empty;
     public string GcpZone { get; init; } = string.Empty;
     public string GcpInstanceName { get; init; } = string.Empty;
@@ -27,6 +32,7 @@ public sealed class AgentConfig
         if (ConfidenceThreshold is < 1 or > 100) throw new InvalidOperationException("confidenceThreshold must be between 1 and 100.");
         if (EntropyThreshold is < 0 or > 8) throw new InvalidOperationException("entropyThreshold must be between 0 and 8.");
         if (EntropySampleBytes is < 1024 or > 1048576) throw new InvalidOperationException("entropySampleBytes must be between 1024 and 1048576.");
+        if (GcpShutdownConfirmTimeoutSeconds is < 30 or > 3600) throw new InvalidOperationException("gcpShutdownConfirmTimeoutSeconds must be between 30 and 3600.");
         if ((!string.IsNullOrWhiteSpace(GcpProjectId) && !GcpIdentifier.IsValidProject(GcpProjectId)) ||
             (!string.IsNullOrWhiteSpace(GcpZone) && !GcpIdentifier.IsValidZone(GcpZone)) ||
             (!string.IsNullOrWhiteSpace(GcpInstanceName) && !GcpIdentifier.IsValidInstance(GcpInstanceName)))

@@ -29,6 +29,9 @@ public sealed class ConfigProvider : IDisposable
     {
         if (!File.Exists(_path)) throw new FileNotFoundException($"Configuration file not found: {_path}");
         var config = JsonSerializer.Deserialize<AgentConfig>(File.ReadAllText(_path), Json.Options) ?? throw new InvalidOperationException("Configuration is empty.");
+        // webhook_url may be plaintext (legacy) or a "dpapi:" blob produced by
+        // `AntiCryptoMinerd.exe --protect-webhook <url>`. Unprotect() is a no-op for plaintext.
+        config.WebhookUrl = SecretProtector.Unprotect(config.WebhookUrl);
         config.Validate();
         return config;
     }

@@ -1,4 +1,5 @@
 {
+  "_webhook_url_comment": "Chay 'AntiCryptoMinerd.exe --protect-webhook <url>' tren may dich, dan chuoi 'dpapi:...' in ra vao day. Khong luu URL dang plaintext.",
   "webhook_url": "",
   "scan_interval_seconds": 30,
   "confidence_threshold": 70,
@@ -10,7 +11,10 @@
   "enable_driver_check": true,
   "enable_container_check": true,
   "enable_sysmon_telemetry": false,
+  "gcp_shutdown_self": false,
   "gcp_delete_self": false,
+  "gcp_shutdown_require_confirmation": false,
+  "gcp_shutdown_confirm_timeout_seconds": 300,
   "gcp_project_id": "",
   "gcp_zone": "",
   "gcp_instance_name": "",

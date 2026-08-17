@@ -24,7 +24,7 @@ public sealed class DiscordNotifier
                 fields = new[]
                 {
                     Field("Hostname", context.Hostname), Field("GCP instance", gcp is null ? "Not detected" : $"{gcp.ProjectId}/{gcp.Zone}/{gcp.InstanceName}"),
-                    Field("Confidence", alert.Confidence.ToString()), Field("Reasons", string.Join("; ", alert.Reasons)),
+                    Field("Confidence", alert.Confidence.ToString()), Field("Process owner", alert.ProcessOwner ?? "Unavailable"), Field("Reasons", string.Join("; ", alert.Reasons)),
                     Field("Path / command", Trim($"{alert.ExecutablePath} {alert.CommandLine}")), Field("Network", alert.NetworkContext ?? "None"),
                     Field("Resource", alert.ResourceContext ?? "None"), Field("Action", alert.ActionTaken)
                 }
